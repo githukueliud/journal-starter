@@ -100,6 +100,8 @@ async def analyze_journal_entry(
                 "topics": {
                     "type": "array",
                     "items": {"type": "string"},
+                    "minItems": 2,
+                    "maxItems": 4,
                 },
             },
             "required": ["sentiment", "summary", "topics"],
