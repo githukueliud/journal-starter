@@ -9,10 +9,13 @@ Set OPENAI_API_KEY, OPENAI_BASE_URL, and OPENAI_MODEL in your .env file.
 Settings are loaded by ``api.config.Settings``.
 """
 
+import json
+
 import httpx
 from openai import AsyncOpenAI
 
 from api.config import get_settings
+from api.models.entry import AnalysisResponse
 
 
 class InvalidAnalysisResponseError(ValueError):
@@ -84,10 +87,60 @@ async def analyze_journal_entry(
 
     request_failed = True
     try:
-        raise NotImplementedError(
-            "Chapter 9: implement the request and validation here. "
-            "See docs/09-ai-analysis.md for the walkthrough."
+        analysis_schema = {
+            "type": "object",
+            "properties": {
+                "sentiment": {
+                    "type": "string",
+                    "enum": ["positive", "negative", "neutral"],
+                },
+                "summary": {
+                    "type": "string",
+                },
+                "topics": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["sentiment", "summary", "topics"],
+            "additionalProperties": False,
+        }
+
+        response = await client.responses.create(
+            model=get_settings().openai_model,
+            input=entry_text,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "journal_analysis",
+                    "strict": True,
+                    "schema": analysis_schema,
+                }
+            },
         )
+
+        if response.status != "completed":
+            raise InvalidAnalysisResponseError("Provider response was not completed")
+
+        output_text = response.output_text
+        if not output_text or not output_text.strip():
+            raise InvalidAnalysisResponseError("Provider returned empty output")
+
+        parsed = json.loads(output_text)
+        if not isinstance(parsed, dict):
+            raise InvalidAnalysisResponseError("Provider response was not a dictionary")
+
+        if not {"sentiment", "summary", "topics"}.issubset(parsed.keys()):
+            raise InvalidAnalysisResponseError("Missing required fields in provider response")
+
+        validated = AnalysisResponse(
+            entry_id=entry_id,
+            sentiment=parsed["sentiment"],
+            summary=parsed["summary"],
+            topics=parsed["topics"],
+        )
+        request_failed = False
+        return validated.model_dump(mode="json")
     finally:
         if owns_client:
             try:
