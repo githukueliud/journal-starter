@@ -6,6 +6,15 @@ spec:
   domains:
     - 8.233.223.40.sslip.io
 ---
+apiVersion: networking.gke.io/v1
+kind: FrontendConfig
+metadata:
+  name: journal-frontend-config
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -13,6 +22,7 @@ metadata:
   annotations:
     kubernetes.io/ingress.global-static-ip-name: journal-ingress-ip
     networking.gke.io/managed-certificates: journal-certificate
+    networking.gke.io/v1beta1.FrontendConfig: journal-frontend-config
 spec:
   rules:
   - http:
