@@ -101,8 +101,84 @@ flowchart TB
 
 ### 4. Production Limitation & Next Steps
 
-- **Limitation:** Lack of user authentication and data isolation. Every client accessing `https://34.171.17.42.sslip.io/entries` shares a single global journal store without per-user tenancy or role-based access control.
+- **Limitation:** Lack of user authentication and data isolation. Every client accessing `https://8.233.223.40.sslip.io/entries` shares a single global journal store without per-user tenancy or role-based access control.
 - **Production Solution:** Implement OAuth2 / JWT authentication (e.g. Firebase Auth, Auth0, or Cognito) and associate all journal records with an authenticated `user_id` column with row-level security.
+
+---
+
+## Phase 5 & 6: DevOps & Security Hardening Deployment
+
+### 1. Architecture Overview
+
+```mermaid
+flowchart TD
+    Client["Client / Verifier"] -->|"HTTP:80 (301 Redirect to HTTPS)"| Ingress["GCP Cloud Load Balancer (Ingress)<br/>IP: 8.233.223.40"]
+    Client -->|"HTTPS:443 (Google-Managed TLS)<br/>Strict-Transport-Security: max-age=31536000"| Ingress
+    
+    subgraph GCP["Google Cloud Platform (us-central1)"]
+        subgraph VPC["Custom VPC: journal-k8s-vpc"]
+            subgraph GKE["GKE Cluster: journal-cluster"]
+                Pod1["journal-api Pod 1<br/>Port 8000"]
+                Pod2["journal-api Pod 2<br/>Port 8000"]
+            end
+            
+            subgraph PrivateDataTier["Private Database Tier (Private Services Access)"]
+                CloudSQL["Cloud SQL PostgreSQL 15<br/>Private IP: 10.38.0.3:5432<br/>ipv4_enabled = false"]
+            end
+        end
+
+        subgraph IAMSecurity["Security & Governance"]
+            SM["GCP Secret Manager<br/>DATABASE_URL, OPENAI_*"]
+            Audit["GCP Cloud Audit Logs<br/>90-day retention"]
+            Monitoring["Cloud Monitoring Alert<br/>Pod Restart Count Threshold"]
+            SA["Dedicated Service Accounts<br/>journal-api-runtime & journal-ci-deployer"]
+        end
+    end
+
+    Ingress --> Pod1 & Pod2
+    Pod1 & Pod2 -->|"Internal TCP 5432 Only"| CloudSQL
+    Pod1 & Pod2 -.->|"Fetch Secrets on Deploy/Run"| SM
+    GKE -.-> Audit
+    GKE -.-> Monitoring
+```
+
+### 2. Security Hardening Controls Implemented (Phase 6)
+
+1. **Dedicated Service Accounts & Minimal Privilege:**
+   - App runtime and CI/CD use dedicated non-personal service accounts (`journal-api-runtime@kenya-one-505921.iam.gserviceaccount.com` and `journal-ci-deployer@...`).
+   - Permissions strictly scoped to `roles/secretmanager.secretAccessor` and `roles/cloudsql.client`.
+2. **Managed Secrets in GCP Secret Manager:**
+   - `DATABASE_URL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `OPENAI_MODEL` stored exclusively in GCP Secret Manager.
+   - Zero plaintext credentials or `.env` files stored in source control or committed manifests.
+3. **Private Database Tier:**
+   - Cloud SQL instance `journal-pg-7ca9543b` operates with `ipv4_enabled = false` and connects solely via Private Services Access (`10.38.0.3`). Public internet connections are impossible.
+4. **Enforced HTTPS & HSTS:**
+   - GKE Ingress FrontendConfig automatically issues HTTP `301 Moved Permanently` redirects for plaintext traffic on port 80.
+   - FastAPI application injects `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `X-Content-Type-Options: nosniff`, and `X-Frame-Options: DENY` headers on all responses.
+5. **Cloud Audit Logging:**
+   - Audit logging enabled across Cloud IAM, GKE, and Cloud SQL with a configured 90-day retention policy (`_Default` log bucket).
+6. **Cloud Monitoring Security Alerts:**
+   - Automated alert policy configured for container restart anomalies (`kubernetes.io/container/restart_count > 2` over 10m) notifying administrators.
+7. **CodeQL Automated Vulnerability Scanning:**
+   - GitHub Actions workflow (`.github/workflows/codeql.yml`) executes automated AST-based security analysis (`security-and-quality` suite) on every push and weekly schedule.
+
+### 3. Production Verification Evidence
+
+- **Public Endpoint:** `https://8.233.223.40.sslip.io`
+- **Current Main Commit:** `4419924dd69a215f397960aba9b77276225fe20b`
+- **GET /version Response:**
+  ```json
+  {"commit": "4419924dd69a215f397960aba9b77276225fe20b"}
+  ```
+- **HSTS Header Verification:**
+  ```http
+  strict-transport-security: max-age=31536000; includeSubDomains
+  ```
+- **HTTP Block/Redirect:**
+  ```http
+  HTTP/1.1 301 Moved Permanently
+  Location: https://8.233.223.40.sslip.io:443/version
+  ```
 
 ## License
 
