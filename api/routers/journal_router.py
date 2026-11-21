@@ -1,4 +1,5 @@
 import logging
+import os
 import traceback
 from json import JSONDecodeError
 from typing import Annotated
@@ -148,3 +149,8 @@ async def analyze_entry(entry_id: str, entry_service: EntryServiceDependency) ->
     except Exception as e:
         _log_analysis_failure(entry_id, e)
         raise HTTPException(status_code=500, detail="Analysis failed") from e
+
+
+@router.get("/version")
+async def get_version() -> dict[str, str]:
+    return {"commit": os.getenv("GIT_SHA", "unknown")}

@@ -690,3 +690,9 @@ class TestAnalyzeEntry:
         assert "provider-private-marker" not in caplog.text
         assert "ValidationError" in caplog.text
         assert all(record.exc_info is None for record in caplog.records)
+
+    async def test_get_version(self, test_client, monkeypatch):
+        monkeypatch.setenv("GIT_SHA", "abc123def456")
+        response = await test_client.get("/version")
+        assert response.status_code == 200
+        assert response.json() == {"commit": "abc123def456"}
