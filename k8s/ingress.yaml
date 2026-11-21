@@ -6,7 +6,7 @@ spec:
   domains:
     - 8.233.223.40.sslip.io
 ---
-apiVersion: networking.gke.io/v1
+apiVersion: networking.gke.io/v1beta1
 kind: FrontendConfig
 metadata:
   name: journal-frontend-config
