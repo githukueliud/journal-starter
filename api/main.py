@@ -2,7 +2,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 
 from api.config import get_settings
 from api.logging_config import configure_logging
@@ -31,4 +31,16 @@ app = FastAPI(
     description="A simple journal API for tracking daily work, struggles, and intentions",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next: object) -> Response:
+    """Add HSTS and other security headers to every response."""
+    response: Response = await call_next(request)  # type: ignore[operator]
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
 app.include_router(journal_router)

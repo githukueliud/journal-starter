@@ -1,0 +1,35 @@
+{
+  "displayName": "Journal API Pod Restart Alert",
+  "documentation": {
+    "content": "Alert fires when a Journal API pod restarts more than 2 times in 10 minutes, indicating application instability.",
+    "mimeType": "text/markdown"
+  },
+  "conditions": [
+    {
+      "displayName": "GKE Pod Restart Count > 2",
+      "conditionThreshold": {
+        "filter": "resource.type = \"k8s_container\" AND resource.labels.namespace_name = \"default\" AND resource.labels.container_name = \"journal-api\" AND metric.type = \"kubernetes.io/container/restart_count\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "600s",
+            "perSeriesAligner": "ALIGN_DELTA",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "groupByFields": ["resource.labels.pod_name"]
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 2,
+        "duration": "0s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "autoClose": "604800s"
+  },
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": ["projects/kenya-one-505921/notificationChannels/14970301036048478053"]
+}
